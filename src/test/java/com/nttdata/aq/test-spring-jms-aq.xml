@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:tx="http://www.springframework.org/schema/tx"
+       xmlns:p="http://www.springframework.org/schema/p" 
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:orcl="http://www.springframework.org/schema/data/orcl" 
+       xmlns:jms="http://www.springframework.org/schema/jms"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+       http://www.springframework.org/schema/beans/spring-beans-3.0.xsd
+       http://www.springframework.org/schema/tx
+       http://www.springframework.org/schema/tx/spring-tx-3.0.xsd
+       http://www.springframework.org/schema/context
+       http://www.springframework.org/schema/context/spring-context-3.0.xsd
+       http://www.springframework.org/schema/data/orcl
+       http://www.springframework.org/schema/data/orcl/spring-data-orcl-1.0.xsd
+       http://www.springframework.org/schema/jms
+       http://www.springframework.org/schema/jms/spring-jms-3.0.xsd">
+
+
+    <context:property-placeholder location="classpath:spring/data-access.properties"/>
+
+    <!-- DataSource configuration for Apache Commons DBCP. -->
+    <bean id="DataSource" class="org.apache.commons.dbcp.BasicDataSource" destroy-method="close"
+          p:driverClassName="${jdbc.driverClassName}" p:url="${jdbc.url}"
+          p:username="${jdbc.username}" p:password="${jdbc.password}"/>
+
+
+
+	
+	<!--  GG Advanced queue Coordinator: it is wired via the GPE_COMMANDER queue
+	 	and needs a bunch of prototype beans wired by Spring
+	 	
+	 	The final objective is to have beans here in PROTOTYPE SCOPE! 
+	 -->
+	<bean id="AdvancedQueueCoordinator" 
+		class="it.vtfinance.vtpie.commons.aq.AdvancedQueueCoordinator"> 
+			<lookup-method name="createAQPaymentConsumer"    bean="AQPaymentConsumer" />
+	</bean>
+	
+	
+	
+	<!--  GG Very important: to avoid confusion, keep the concurrency low	      	
+	-->
+    <jms:listener-container connection-factory="connectionFactory"    
+    		concurrency="1" 
+            transaction-manager="DefaultTransactionManager">
+        <!--  GG Was GpeCommandListener dimissed -->
+        <jms:listener destination="GPE_COMMANDER_PROD"             		            		
+                ref="AdvancedQueueCoordinator" method="handleCommandMessage"/>
+    </jms:listener-container>
+    
+    
+    <!-- Shard data sources.... 
+         Connected via SID something like
+         jdbc:oracle:thin:@exam101t.internal.unicreditgroup.eu:1527:usgpeot01
+         jdbc:oracle:thin:@exam102t.internal.unicreditgroup.eu:1527:usgpeot02        
+    -->
+<!--     <bean id="DataSourceSid1" class="org.springframework.jndi.JndiObjectFactoryBean" > -->
+<!-- 		<property name="jndiName" value="jdbc/vtpieHotFix1"/> -->
+<!-- 	</bean> -->
+
+<!--     <bean id="DataSourceSid2" class="org.springframework.jndi.JndiObjectFactoryBean"> -->
+<!-- 		<property name="jndiName" value="jdbc/vtpieHotFix2"/> -->
+<!-- 	</bean> -->
+	
+	
+    
+<!-- TODO parametrizzare  -->
+	<bean id="AQFileNotificationContainer" class="org.springframework.jms.listener.DefaultMessageListenerContainer">
+		<property name="destinationName" value="FILE_NOTIFICATION" />
+		<property name="messageListener" ref="FileNotificationListener" />
+		<property name="connectionFactory" ref="connectionFactory"/>
+		<property name="concurrentConsumers" value="1" />
+		<property name="sessionTransacted" value="true"/>
+	</bean>
+	
+	<bean id="AQBulkContainer" class="org.springframework.jms.listener.DefaultMessageListenerContainer">
+		<property name="destinationName" value="BULK_RECIPIENT" />
+		<property name="messageListener" ref="WflBulkListenerNew" />
+		<property name="connectionFactory" ref="connectionFactory"/>
+		<property name="concurrentConsumers" value="${jms.consumer.GOBulkContainer}" />
+		<property name="sessionTransacted" value="true"/>
+	</bean>
+	    
+<!--     <jms:listener-container connection-factory="connectionFactory" -->
+<!--     		concurrency="4-8"  -->
+<!--             transaction-manager="DefaultTransactionManager"> -->
+<!--         <jms:listener destination="FILE_NOTIFICATION" ref="FileNotificationListener"/> -->
+<!--     </jms:listener-container> -->
+   
+    <!--
+     Remember:
+     Multiple consumer queues map to JMS Topics, single consumer queues map to JMS queues. 
+     
+     You can try to change connection-factory-type to TOPIC_CONNECTION/QUEUE_CONNECTION
+     Anyway, in the test we end up 
+          
+          
+    See 
+    /commons/src/main/java/it/vtfinance/vtpie/commons/resources/spring/spring-ibatis-datasource-be.xml
+    for DataSource Bean definition          
+     -->
+    <orcl:aq-jms-connection-factory id="connectionFactory"
+            use-local-data-source-transaction="true"
+            connection-factory-type="CONNECTION"
+            native-jdbc-extractor="nativeJdbcExtractor"
+            data-source="DataSource"/>
+    
+    <!--  Options:
+    	org.springframework.jdbc.support.nativejdbc.CommonsDbcpNativeJdbcExtractor    	
+    	WebSphereNativeJdbcExtractor
+     -->
+    <bean id="nativeJdbcExtractor" class="${gpe.nativeJdbcExtractor:org.springframework.jdbc.support.nativejdbc.WebSphereNativeJdbcExtractor}"/>
+
+    <bean id="jmsAQTemplate" class="org.springframework.jms.core.JmsTemplate">
+        <property name="sessionTransacted" value="true"/>
+        <property name="connectionFactory" ref="connectionFactory"/>
+    </bean>
+    
+    <bean id="JmsAqObjectMessageSender" class="it.vtfinance.vtpie.commons.jms.sender.JmsAQObjectMessageSender">
+		<constructor-arg ref="jmsAQTemplate" />
+	</bean>
+
+</beans>
