@@ -1,0 +1,20 @@
+# Properties file with JDBC and JPA settings.
+#
+# Applied by <context:property-placeholder location="jdbc.properties"/> from
+# various application context XML files (e.g., "applicationContext-*.xml").
+# Targeted at system administrators, to avoid touching the context XML files.
+
+
+jdbc.driverClassName=oracle.jdbc.OracleDriver
+jdbc.url=jdbc:oracle:thin:@//<host>:<port>/<servicename>
+jdbc.username=trust
+jdbc.password=noone
+
+# Properties that control the population of schema and data for a new data source
+jdbc.initLocation=unused-right-now
+jdbc.dataLocation=unused-right-now
+
+# Property that determines which database to use with an AbstractJpaVendorAdapter
+jpa.database=ORACLE
+jpa.showSql=true
+
