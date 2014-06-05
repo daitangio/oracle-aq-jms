@@ -10,7 +10,7 @@ procedure say(msg varchar2)
 IS
  pragma autonomous_transaction;
 begin
-  INSERT INTO VT_LOG_QUEUE (MSG) VALUES (msg);
+  INSERT INTO AQ_LOG (MSG) VALUES (msg);
   COMMIT;
   dbms_output.put_line ('<AQ> '||msg);
 end;
@@ -248,6 +248,7 @@ end create_vt_queue;
 
 
 /************ DEQUEUE UTIL FUNCTION */
+/*
 function dequeue_util (
   p_queue_name       varchar2,
   p_timeout_secs     int default 600,
@@ -288,7 +289,7 @@ exception
     p_message_present := 'N';
     return null;
 end dequeue_util; 
-
+*/
 
 
 
@@ -335,6 +336,45 @@ begin
   
   return l_msgid;
 end jms_enqueue;
+
+
+-- New topic enqueue
+function jms_topic_enqueue (
+  p_queue_name      varchar2,
+  p_message varchar2, 
+  p_priority number default 100
+)
+return raw
+is
+  l_queue_name     varchar2(40);
+  l_queue_name_exc varchar2(40);
+  l_options        dbms_aq.enqueue_options_t;
+  l_msg_props      dbms_aq.message_properties_t;
+  l_msgid          raw(32);
+  l_msg            sys.aq$_jms_text_message := sys.aq$_jms_text_message.construct();
+
+begin
+  l_queue_name      := sys_context ('userenv', 'current_user')||'.'|| p_queue_name;
+  l_queue_name_exc  := l_queue_name || '_EX';
+  
+  l_msg_props.priority := p_priority;
+  l_msg_props.exception_queue := l_queue_name_exc;
+
+  l_msg.set_text (p_message);
+
+
+  --     --payload            => utl_raw.cast_to_raw (p_message),
+
+  dbms_aq.enqueue (
+    queue_name         => l_queue_name,
+    enqueue_options    => l_options,
+    message_properties => l_msg_props,
+    payload            => l_msg,
+    msgid              => l_msgid 
+  );
+  
+  return l_msgid;
+end jms_topic_enqueue;
 
 
 
@@ -650,230 +690,10 @@ Core work
 
 
 
-/**
- Must return a ordered subselect which maps the
- vt_bulk_payments table columns
-*/
-function get_bulk_payments_sql(
-	 aq_msg_id IN NUMBER,
-         bankCode  IN VARCHAR2 ,
-         bulkDate  IN DATE ,
-         bulkCode  IN NUMBER	 
-)
-   RETURN CLOB
-IS
- get_bulk_payments_cache CLOB;
- CURSOR remapCursor IS
-  SELECT  
-        C || decode(REMAP,NULL, NULL, ( ' as ' || REMAP) ) AS MX
-  FROM vt_bulk_payments_COLUMN_MAP WHERE FUNC ='SEND_BULK_PAYMENTS_FULL'
-  order by "COLUMN_ORDER";
-
-  remapLine remapCursor%ROWTYPE;
-  actual_query CLOB;
-  
-
-BEGIN
-
-  --if get_bulk_payments_cache is null then
-      say(' Building query cache for SEND_BULK_PAYMENTS_FULL');
-      
-      get_bulk_payments_cache := '  select ' || aq_msg_id ||'  as AQ_ID_BATCH,
-    ''SEND_BULK_PAYMENTS_FULL'' AS PID ,
-       to_date( ''' || TO_CHAR(bulkDate,'ddMMyy') || ''', ''ddMMyy'')  AS ITEM_TECH_DATE,
-     '||  bulkCode || ' as ITEM_TECH_CODE,
-     sysdate as  MSG_LOAD_DATE,
-    ALLPAYMENTS.*
-    FROM 
-    (SELECT dp.rowid as DP_ROWID
-' ;
-      
-      -- Fill in mega query: part1 mapping columns....
-      open remapCursor;
-      loop 
-        fetch remapCursor into remapLine;
-      	EXIT WHEN remapCursor%NOTFOUND;
-      	get_bulk_payments_cache := get_bulk_payments_cache || ',' || remapLine.MX;
-      	-- say(' ' || get_bulk_payments_cache );
-      end loop;
-
-      get_bulk_payments_cache := get_bulk_payments_cache || '
-
-';
-
-      get_bulk_payments_cache := get_bulk_payments_cache || ' FROM VT_DISPOSIZIONI dp LEFT OUTER JOIN VT_ORDINANTI_DISPOSIZIONI od ON dp.COD_BANCA = od.COD_BANCA
-   AND dp.DATA_ORDINANTE                                                                              =
-   od.DATA_ORDINANTE AND dp.COD_TECNICO_ORDINANTE                                                     =
-   od.COD_TECNICO_ORDINANTE LEFT OUTER JOIN VT_PARTY_IDENTIFICATION_ISO pic ON od.COD_BANCA           = pic.COD_BANCA
-   AND od.DATA_PARTY_ID                                                                               =
-   pic.DATA_PARTY_ID AND od.COD_TECNICO_PARTY_ID                                                      =
-   pic.COD_TECNICO_PARTY_ID LEFT OUTER JOIN VT_PARTY_PRIVATE_IDENT_ISO ppic ON pic.COD_BANCA          = ppic.COD_BANCA
-   AND pic.DATA_PARTY_ID                                                                              =
-   ppic.DATA_PARTY_ID AND pic.COD_TECNICO_PARTY_ID                                                    =
-   ppic.COD_TECNICO_PARTY_ID LEFT OUTER JOIN VT_CONTROPARTI_DISPOSIZIONI cp ON dp.COD_BANCA           = cp.COD_BANCA
-   AND dp.DATA_CONTROPARTE                                                                            =
-   cp.DATA_CONTROPARTE AND dp.COD_TECNICO_CONTROPARTE                                                 =
-   cp.COD_TECNICO_CONTROPARTE LEFT OUTER JOIN VT_PARTY_IDENTIFICATION_ISO pid ON cp.COD_BANCA         = pid.COD_BANCA
-   AND cp.DATA_PARTY_ID                                                                               =
-   pid.DATA_PARTY_ID AND cp.COD_TECNICO_PARTY_ID                                                      =
-   pid.COD_TECNICO_PARTY_ID LEFT OUTER JOIN VT_PARTY_PRIVATE_IDENT_ISO ppid ON pid.COD_BANCA          = ppid.COD_BANCA
-   AND pid.DATA_PARTY_ID                                                                              =
-   ppid.DATA_PARTY_ID AND pid.COD_TECNICO_PARTY_ID                                                    =
-   ppid.COD_TECNICO_PARTY_ID LEFT OUTER JOIN VT_DISPOS_SEPA sp ON dp.COD_BANCA                        = sp.COD_BANCA
-   AND dp.DATA_DISPOSIZIONE                                                                           =
-   sp.DATA_DISPOSIZIONE AND dp.COD_TECNICO_DISPOSIZIONE                                               =
-   sp.COD_TECNICO_DISPOSIZIONE LEFT OUTER JOIN VT_DISPOS_MANDATI md ON dp.COD_BANCA                   = md.COD_BANCA
-   AND dp.DATA_DISPOSIZIONE                                                                           =
-   md.DATA_DISPOSIZIONE AND dp.cod_tecnico_disposizione                                               =
-   md.cod_tecnico_disposizione LEFT OUTER JOIN VT_PARTY_IDENTIFICATION_ISO csi ON md.COD_BANCA        = csi.COD_BANCA
-   AND md.data_PARTY_ID_FIRM                                                                          =
-   csi.DATA_PARTY_ID AND md.COD_TECNICO_PARTY_ID_FIRM                                                 =
-   csi.COD_TECNICO_PARTY_ID LEFT OUTER JOIN VT_PARTY_PRIVATE_IDENT_ISO csiprvt ON csi.COD_BANCA       =
-   csiprvt.COD_BANCA AND csi.DATA_PARTY_ID                                                            =
-   csiprvt.DATA_PARTY_ID AND csi.COD_TECNICO_PARTY_ID                                                 =
-   csiprvt.COD_TECNICO_PARTY_ID LEFT OUTER JOIN VT_FILE_DISPOSIZIONI fd ON dp.COD_BANCA               = fd.COD_BANCA
-   AND dp.DATA_DISPOSIZIONE                                                                           = fd.DATA_FILE
-   AND dp.COD_TECNICO_FILE                                                                            =
-   fd.COD_TECNICO_FILE LEFT OUTER JOIN VT_DISPOS_ORIGINAL DO ON dp.COD_BANCA                          = do.COD_BANCA
-   AND dp.DATA_DISPOSIZIONE                                                                           =
-   do.DATA_DISPOSIZIONE AND dp.COD_TECNICO_DISPOSIZIONE                                               =
-   do.COD_TECNICO_DISPOSIZIONE LEFT OUTER JOIN VT_PARTY_IDENTIFICATION_ISO pido ON do.COD_BANCA       = pido.COD_BANCA
-   AND do.DATA_PARTY_ID                                                                               =
-   pido.DATA_PARTY_ID AND do.COD_TECNICO_PARTY_ID                                                     =
-   pido.COD_TECNICO_PARTY_ID LEFT OUTER JOIN VT_PARTY_PRIVATE_IDENT_ISO ppido ON pido.COD_BANCA       = ppido.COD_BANCA
-   AND pido.DATA_PARTY_ID                                                                             =
-   ppido.DATA_PARTY_ID AND pido.COD_TECNICO_PARTY_ID                                                  =
-   ppido.COD_TECNICO_PARTY_ID LEFT OUTER JOIN VT_DISPOS_ORIG_FINALE og ON dp.COD_BANCA                = og.COD_BANCA
-   AND dp.DATA_DISPOSIZIONE                                                                           =
-   og.DATA_DISPOSIZIONE AND dp.COD_TECNICO_DISPOSIZIONE                                               =
-   og.COD_TECNICO_DISPOSIZIONE LEFT OUTER JOIN VT_PARTY_IDENTIFICATION_ISO pigc ON og.COD_BANCA       = pigc.COD_BANCA
-   AND og.DATA_PARTY_ID_ORDIN_ORIG                                                                    =
-   pigc.DATA_PARTY_ID AND og.COD_TECNICO_PARTY_ID_ORDIN_ORI                                           =
-   pigc.COD_TECNICO_PARTY_ID LEFT OUTER JOIN VT_PARTY_PRIVATE_IDENT_ISO ppigc ON pigc.COD_BANCA       = ppigc.COD_BANCA
-   AND pigc.DATA_PARTY_ID                                                                             =
-   ppigc.DATA_PARTY_ID AND pigc.COD_TECNICO_PARTY_ID                                                  =
-   ppigc.COD_TECNICO_PARTY_ID LEFT OUTER JOIN VT_PARTY_IDENTIFICATION_ISO pigd ON og.COD_BANCA        = pigd.COD_BANCA
-   AND og.DATA_PARTY_ID_CONTROP_FINALE                                                                =
-   pigd.DATA_PARTY_ID AND og.COD_TECNICO_PARTY_ID_CONTROP_F                                           =
-   pigd.COD_TECNICO_PARTY_ID LEFT OUTER JOIN VT_PARTY_PRIVATE_IDENT_ISO ppigd ON pigd.COD_BANCA       = ppigd.COD_BANCA
-   AND pigd.DATA_PARTY_ID                                                                             =
-   ppigd.DATA_PARTY_ID AND pigd.COD_TECNICO_PARTY_ID                                                  =
-   ppigd.COD_TECNICO_PARTY_ID LEFT OUTER JOIN VT_PARTY_IDENTIFICATION_ISO mdpii ON md.COD_BANCA       = mdpii.COD_BANCA
-   AND md.data_PARTY_ID_FIRM_ORIG                                                                     =
-   mdpii.DATA_PARTY_ID AND md.COD_TECNICO_PARTY_ID_FIRM_ORIG                                          =
-   mdpii.COD_TECNICO_PARTY_ID LEFT OUTER JOIN VT_PARTY_PRIVATE_IDENT_ISO mdppii ON mdpii.COD_BANCA    =
-   mdppii.COD_BANCA AND mdpii.DATA_PARTY_ID                                                           =
-   mdppii.DATA_PARTY_ID AND mdpii.COD_TECNICO_PARTY_ID                                                =
-   mdppii.COD_TECNICO_PARTY_ID LEFT OUTER JOIN VT_PARTY_IDENTIFICATION_ISO odgpii ON md.COD_BANCA     =
-   odgpii.COD_BANCA AND md.ORGDBT_DATE                                                                =
-   odgpii.DATA_PARTY_ID AND md.ORGDBT_SEQ                                                             =
-   odgpii.COD_TECNICO_PARTY_ID LEFT OUTER JOIN VT_PARTY_PRIVATE_IDENT_ISO odgppii ON odgpii.COD_BANCA =
-   odgppii.COD_BANCA AND odgpii.DATA_PARTY_ID                                                         =
-   odgppii.DATA_PARTY_ID AND odgpii.COD_TECNICO_PARTY_ID                                              =
-   odgppii.COD_TECNICO_PARTY_ID LEFT OUTER JOIN VT_DISPOS_EMBARGO_FEEDBACK embf ON dp.COD_BANCA       = embf.COD_BANCA
-   AND dp.DATA_DISPOSIZIONE                                                                           =
-   embf.DATA_DISPOSIZIONE AND dp.COD_TECNICO_DISPOSIZIONE                                             =
-   embf.COD_TECNICO_DISPOSIZIONE LEFT OUTER JOIN VT_DISPOS_ID_ALTERNATIVI alt ON dp.COD_BANCA         = alt.COD_BANCA
-   AND dp.DATA_DISPOSIZIONE                                                                           =
-   alt.DATA_DISPOSIZIONE AND dp.COD_TECNICO_DISPOSIZIONE                                              =
-   alt.COD_TECNICO_DISPOSIZIONE ';
-
-  --end if;
-
-  actual_query := get_bulk_payments_cache || '
-
-   WHERE dp.COD_BANCA       = '''|| bankCode ||''' AND
-   dp.DATA_DISTINTA         = :bulkDate AND
-   dp.COD_TECNICO_DISTINTA  = '||bulkCode||'
-    ) ALLPAYMENTS
-   ';   
-  return actual_query;
-
-
-END;
-
-/*
-PROCEDURE TEST_42
-IS
- select_part CLOB;
- d DATE default sysdate;
- aq_msg_id NUMBER;
-
- start_cpu_time NUMBER;
- end_cpu_time NUMBER;
- l_sec_taken    NUMBER;
- l_elements_sent NUMBER;
-BEGIN
-
-
-	-- declare
-	--   p_message_present  varchar2(1);
-	--   p_payload          vt_bulk_payments%ROWTYPE;
-	-- begin
-	-- say('Testing dequeue 1 msg....');
-	-- DEQUEUE_BULK_PAYMENTS(
-	--   p_timeout_secs     =>1,
-	--   p_message_present  =>p_message_present,
-	--   p_payload =>p_payload         
-        -- );
-	-- if p_message_present = 'Y' then
-	--  say('Payload: Bulkid: ' || p_payload.AQ_ID_BATCH);
-	--  say('Item tech code : ' || p_payload.ITEM_TECH_CODE);
-	-- end if;
-        -- end;
-	
-	
-	-- Find out data
-
-	-- select_part := get_bulk_payments_sql(   2323 , 'C0' , sysdate, 9000 );
-	-- say(select_part);
-	-- --sbms_output.put_line(insert_signature);
-	-- say('Executing...');	
-	-- execute immediate select_part using d;
-	say('Ready to test send...');
-
-
-	for dataFinder in (select * FROM (
-	       select * FROM(
-	       SELECT count(*) AS N, DATA_DISTINTA, COD_TECNICO_DISTINTA
-	       FROM VT_DISPOSIZIONI dp 
-	       WHERE dp.COD_BANCA                                                    = 'C0' 
-	       group by DATA_DISTINTA, COD_TECNICO_DISTINTA
-	       order by DATA_DISTINTA DESC, N DESC)
-	       WHERE N<=200)
-	       	 where rownum <=1) 
-	loop
-
-	         say('-----------------------------------------------------------------------------------------');
-		 say('Input:' || dataFinder.COD_TECNICO_DISTINTA || ' ' || dataFinder.DATA_DISTINTA || ' Load:' || dataFinder.N);
-	         start_cpu_time := dbms_utility.GET_CPU_TIME;
-
-
-		 -- Phase2
-		 SEND_BULK_PAYMENTS_FULL(
-		 		 bankCode => 'C0',
-		 		 bulkDate => dataFinder.DATA_DISTINTA ,
-				 bulkCode => dataFinder.COD_TECNICO_DISTINTA,
-				 aq_msg_id =>aq_msg_id,
-				 elements_sent => l_elements_sent);
-		 end_cpu_time := dbms_utility.GET_CPU_TIME;
-		 l_sec_taken := ((end_cpu_time - start_cpu_time)/100);
-
-		 say('CPU Time (in seconds)= '
-                          || l_sec_taken);
-
-		 say('Elem/sec:' ||  (l_elements_sent / l_sec_taken) );
-
-		 say('Generated partition: '|| aq_msg_id);		 
-        end loop;
-
-
-
-END TEST_42;
-*/
 
 
 /****** Support functions *****/
+/*
 procedure enqueue_array (
   p_queue_name     varchar2,
   p_payload_array  vt_queue_payload_array,
@@ -924,8 +744,9 @@ begin
   );
     
 end enqueue_array;
+*/
 
-
+/*
 procedure enqueue_batch (
   p_queue_name varchar2,
   aq_msg_id number,
@@ -973,167 +794,22 @@ begin
   say('[Enqueue_Buffer] Sent ' || l_stuff_sent ||' elements');
   elements_sent := l_stuff_sent;
 end enqueue_batch; 
+*/
 
 
 
 
-/** Una partzione= 1 distinta che ha n disposizioni
-  */
-PROCEDURE SEND_BULK_PAYMENTS_FULL(
-         bankCode IN VARCHAR2 ,
-         bulkDate IN DATE ,
-         bulkCode IN NUMBER ,
-         aq_msg_id  OUT NUMBER,
-	 elements_sent OUT NUMBER )
-IS
- select_part CLOB;
-  l_add_par  VARCHAR2(2000);
-begin
-  -- Do core query and store results into 
-  -- vt_bulk_payments_AQK_I
-  select SEQ_AQ_ID_BATCH.nextVal into  aq_msg_id  from dual;
-
-    -- sia 10 la AQ_ID_BATCH
-
-    -- alter table vt_bulk_payments drop partition test ;
-    -- Ok qui non facciamo il quote dell'input ma l'input è sano.
-
-    l_add_par := 'alter table vt_bulk_payments add partition p'||aq_msg_id||'  values (' || aq_msg_id ||')'; 
-    say(l_add_par);
-    execute immediate l_add_par ;
-       
-
-    select_part := get_bulk_payments_sql( aq_msg_id ,bankCode, bulkDate, bulkCode );
-    say('Doing mega insert');
-    execute immediate ('alter session enable parallel dml');
-    execute immediate ('insert /*+ append parallel(' || INSERT_PARALLEL_LEVEL  || ') */ into vt_bulk_payments partition ( p'||aq_msg_id|| ')' || select_part) using  bulkDate;
-    commit;
-    execute immediate ('alter session disable parallel dml');
-    say('Ok enqueuing data....');
-    enqueue_batch('GPE_BULK_PAYMENTS',aq_msg_id, elements_sent);
-        
-
-end SEND_BULK_PAYMENTS_FULL;
  
 
-PROCEDURE TRUNCATE_OLD_PARTITIONS(partitionNumber IN NUMBER default NULL)
-IS
- pn NUMBER;
-BEGIN
- if partitionNumber IS NULL then
-   select min(AQ_ID_BATCH) into pn from vt_bulk_payments ;
-   say('Oldest partition [Auto]:' || pn);
- else
-  pn := partitionNumber;
-  say('Oldest partition [User Input]:' || pn);
- end if; 	
- 
- execute immediate 'alter table vt_bulk_payments drop partition p' ||pn;
-END TRUNCATE_OLD_PARTITIONS;
 
 
 
-/**
- Single dequeue
-  */
-PROCEDURE DEQUEUE_BULK_PAYMENTS_C(
-  p_timeout_secs     int default 600,
-  p_message_present  out varchar2, -- Y/N 
-  p_payload          out mypayment  
-)
-IS
-  l_aq_msg_id raw(16);
-  l_payload   vt_queue_payload;
-begin
-
-  l_aq_msg_id := dequeue_util (
-    p_queue_name      => 'GPE_BULK_PAYMENTS',
-    p_timeout_secs    => p_timeout_secs,
-    p_message_present => p_message_present,
-    p_payload         => l_payload
-  );
-
-  if p_message_present = 'N' then
-    return;
-  end if;
-
-
-  open p_payload FOR
-  select  *  from vt_bulk_payments 
-  where rowid=chartorowid(l_payload.row_id);
-
-
-END DEQUEUE_BULK_PAYMENTS_C;
-
-
-/** Multi object dequeue */
-PROCEDURE DEQUEUE_BULK_PAYMENTS(
-  p_timeout_secs     int default 600,
-  p_message_present  out varchar2, -- Y/N 
-  p_payload          out mypayment  
-)
-IS
-  l_aq_msg_id1 raw(16);
-  l_aq_msg_id2 raw(16);
-  l_payload1   vt_queue_payload;
-  l_payload2   vt_queue_payload;
-begin
-
-  l_aq_msg_id1 := dequeue_util (
-    p_queue_name      => 'GPE_BULK_PAYMENTS',
-    p_timeout_secs    => p_timeout_secs,
-    p_message_present => p_message_present,
-    p_payload         => l_payload1
-  );
-
-  l_aq_msg_id2 := dequeue_util (
-    p_queue_name      => 'GPE_BULK_PAYMENTS',
-    p_timeout_secs    => p_timeout_secs,
-    p_message_present => p_message_present,
-    p_payload         => l_payload2
-  );
-
-
-  open p_payload FOR
-       select  *  from vt_bulk_payments 
-       where rowid=chartorowid(l_payload1.row_id)
-             OR rowid=chartorowid(l_payload2.row_id) ;
-
-
-END DEQUEUE_BULK_PAYMENTS;
-
-
-PROCEDURE DEQUEUE_BULK_PAYMENTS_R(
-  p_timeout_secs     int default 600,
-  p_message_present  out varchar2, -- Y/N 
-  p_rowid          out rowid
-)
-IS 
-  l_payload   vt_queue_payload;
-  l_aq_msg_id raw(16);
-begin
-
-  l_aq_msg_id := dequeue_util (
-    p_queue_name      => 'GPE_BULK_PAYMENTS',
-    p_timeout_secs    => p_timeout_secs,
-    p_message_present => p_message_present,
-    p_payload         => l_payload
-  );
-
-  if p_message_present = 'N' then
-    p_rowid :=NULL;
-    return;
-  end if;
-  select chartorowid(l_payload.row_id)
-   into p_rowid from dual;
-
-END;
 
 
 
 
 ---- XE Tester
-http://gbowyer.freeshell.org/oracle-aq.html
+-- http://gbowyer.freeshell.org/oracle-aq.html
 procedure testmessage 
 IS
   msg SYS.AQ$_JMS_TEXT_MESSAGE;

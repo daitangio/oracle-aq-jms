@@ -12,14 +12,18 @@ The basic idea is to have a pl/sql package which will push data on queue,
 
 Queue table identifer must sit around 24 chars
 
-
  */
+ 
+ 
+ 
 create or replace package aq_jms_pkg
 is
 
   TYPE t_rowid_array IS TABLE OF ROWID   INDEX BY BINARY_INTEGER;
   AQUEUE_ENQUEUE_ARRAY_LIMIT CONSTANT NUMBER DEFAULT 1000;
   INSERT_PARALLEL_LEVEL   CONSTANT NUMBER DEFAULT 2; -- Try 4 on Exadata
+
+-- -   TYPE mypayment IS REF CURSOR RETURN vt_bulk_payments%ROWTYPE;
 
   procedure create_vt_queue (
     p_queue_name      varchar2, -- case-insensitive
@@ -54,6 +58,13 @@ is
   )
   return raw;
   
+  function jms_topic_enqueue (
+    p_queue_name      varchar2,
+    p_message varchar2, 
+    p_priority number default 100
+  ) return raw;
+  
+  
   -- accoda p_n messaggi col prefisso dato
   procedure enqueue_test (
     p_queue_name varchar2,
@@ -72,49 +83,10 @@ is
 
    procedure ensure_jmsobject_queue_exists(p_qname varchar2, p_force boolean default false);
 
- 
-/*
-   PROCEDURE SEND_BULK_PAYMENTS_FULL(
-         bankCode IN VARCHAR2 ,
-         bulkDate IN DATE ,
-         bulkCode IN NUMBER ,
-         aq_msg_id OUT NUMBER,
-	 elements_sent OUT NUMBER );
-*/
+  procedure drop_single_queue (p_single_queue_name varchar2) ; 
+  procedure drop_single_queue_table (p_single_queue_table_name varchar2) ;
+  procedure stop_single_queue (p_single_queue_name varchar2) ;
 
-   TYPE mypayment IS REF CURSOR RETURN vt_bulk_payments%ROWTYPE;
-
-   PROCEDURE DEQUEUE_BULK_PAYMENTS_C(
-	 p_timeout_secs     int default 600,
-	 p_message_present  out varchar2, -- Y/N 
-	 p_payload          out mypayment
-   );
-
-
-   PROCEDURE DEQUEUE_BULK_PAYMENTS(
-   	 p_timeout_secs     int default 600,
-	 p_message_present  out varchar2, -- Y/N 
-   	 p_payload          out mypayment  
-    );
-
-
-   PROCEDURE DEQUEUE_BULK_PAYMENTS_R(
-   	 p_timeout_secs     int default 600,
-	 p_message_present  out varchar2, -- Y/N 
-   	 p_rowid          out rowid
-    );
-
-    /*** TESTING */
-    -- PROCEDURE TEST_42;
-
-   
-
-
-   /*** HOUSE KEEPING */
-   /**
-     * If partition numer is not provided, it will truncate the oldest
-     */
-   PROCEDURE TRUNCATE_OLD_PARTITIONS(partitionNumber IN NUMBER default NULL);
 
 
 end aq_jms_pkg;
