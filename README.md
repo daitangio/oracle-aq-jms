@@ -27,11 +27,33 @@ Speed Start
 
 
 
-
-Oralce expert support (XE)
+Oracle Express support (XE)
 ============================
+Oracle Express lack the ability to create PL/SQL "objects" needed by AQ.
+In particular trying to execute in PL/SQL something like
+
+  msg := SYS.AQ$_JMS_TEXT_MESSAGE.CONSTRUCT();
+
+results in a "PLS-00302: component ‘CONSTRUCT’ must be declared".
+The reason is unclear, but the net effect is JMS types on the XE database are "crippled’.
+
+Anyway we found this [article explaining how to overcome this limitation][oracle-xe-fix].
+See also this [thread on Oracle web site][oracle-xe-fix-discussion].
+Inside the file 
+
+       src/main/sql/201_aq_gpe_queue_pkg.sql
+
+you can find the testmessage procedure which is able to send a AQ message under Oracle Express.
+
+AQ support under OracleExpress is a bumpy way so plese test every single piece of code if you need it.
+
+
 
 References
 ==============
 http://gbowyer.freeshell.org/oracle-aq.html
 http://technology.amis.nl/GPE_HEARTBEAT7/08/30/enqueuing-aq-jms-text-message-from-plsql-on-oracle-xe/
+
+
+[oracle-xe-fix] http://technology.amis.nl/2007/08/30/enqueuing-aq-jms-text-message-from-plsql-on-oracle-xe/
+[oracle-xe-fix-discussion] https://community.oracle.com/thread/2588733
