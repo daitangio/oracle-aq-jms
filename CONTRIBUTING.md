@@ -1,5 +1,5 @@
-Contributing Stylesheets to AQ-JMS
-===================================
+Contributing to the Advanced Queue JMS Implementation
+=======================================================
 
 **Please make all pull requests against the master branch**
 
@@ -16,14 +16,6 @@ if you do not wish to abide by this rule.
 and click the fork button.
 
 ![Fork Me](http://img.skitch.com/20101015-n4ssnfyj16e555cnn7wp2pg717.png)
-
-Now we're at a decision point. What kind of change do you intend to make?
-
-* [Fix a typo (or some other trivial change)](#trivial-changes)
-* [Documentation Changes](#documentation-changes)
-* [Fixing Stylesheet Bugs](#stylesheet-bugs)
-* [New Stylesheet Features](#stylesheet-changes)
-* [Ruby Changes](#ruby-changes)
 
 Here's some general information about the project you might find useful along the way:
 
@@ -59,11 +51,10 @@ iterations to the original submission. To create a topic branch:
 
 You can now see these changes online at a url like:
 
-    http://github.com/your_user_name/AQ-JMS/commits/new_branch_name
+    http://github.com/your_user_name/oracle-aq-jms/commits/new_branch_name
 
 If you have single-commit patches, it is fine to keep them on master. But do keep in
-mind that these changesets might be
-[cherry-picked](#recovering-from-rebased-or-cherry-picked-changesets).
+mind that these changesets might be cherry-picked.
 
 Once your changeset(s) are on github, select the appropriate branch containing your
 changes and send a pull request. Make sure to choose the same upstream branch that
@@ -71,7 +62,7 @@ you developed against (probably stable or master). Most of the description of yo
 changes should be in the commit messages -- so no need to write a whole lot in the
 pull request message. However, the pull request message is a good place to provide a
 rationale or use case for the change if you think one is needed. More info on [pull
-requests][.pulls].
+requests][pulls].
 
 ![Pull Request Example](http://img.skitch.com/20101015-rgfh43yhk7e61fchj9wccne9cq.png)
 
@@ -79,9 +70,7 @@ Pull requests are then managed like an issue from the [AQ-JMS issues page][issue
 A code review will be performed by a AQ-JMS core team member, and one of three outcomes
 will result:
 
-1. The change is rejected -- Not all changes are right for [AQ-JMS's
-   philosophy](#project-philosophy). If your change is rejected it might be better
-   suited for a plugin, at least until it matures and/or proves itself with the users.
+1. The change is rejected -- We will provide a comment for the reason we rejected it.
 2. The change is rejected, *unless* -- Sometimes, there are missing pieces, or
    other changes that need to be made before the change can be accepted. Comments
    will be left on the commits indicating what issues need to be addressed.
@@ -96,7 +85,7 @@ will result:
             java/            - Java Classes
             sql/             - Oracle Package
       src/test               - Test code
-      oracle-driver          - Oracle libraries      
+      oracle-driver/         - Oracle libraries (propietary) 
 
 
 [pulls]: http://help.github.com/pull-requests/

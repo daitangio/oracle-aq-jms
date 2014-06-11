@@ -18,10 +18,8 @@ Speed Start
 2. Run in the lexicografical order the script under src/main/sql
 3. Compile with gradle and run the unit tests
 
-## Author
-
-
 ## Core Team Members
+
 * [Giovanni Giorgi](https://github/daitangio)
 
 
