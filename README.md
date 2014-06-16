@@ -5,7 +5,7 @@ Oracle Advanced Queuing as JMS replacement using spring and gradle
 
 The project is composed of two major module:
 
-+ utility jar
++ a java demo project which use jms advanced queue via spring
 + a oracle package called aq_jms_pkg used to create the jms queue.
   The package file (including body declaration and test queues) are stored inside
   src/main/sql
