@@ -33,13 +33,24 @@
               p:dataSource-ref="DataSource"/>
               
 	<!--      	
-	-->
+	
     <jms:listener-container connection-factory="connectionFactory"    
     		concurrency="1"     		
             transaction-manager="transactionManager">        
-        <jms:listener destination="GPE_COMMANDER_jj"             		            		
+        <jms:listener destination="GPE_COMMANDER"             		            		
                 ref="AQCommander" method="handleCommandMessage"/>
     </jms:listener-container>
+        -->
+         
+    <jms:listener-container connection-factory="connectionFactory"    
+    		concurrency="1"     		
+            transaction-manager="transactionManager">        
+        <jms:listener destination="GPE_HEARTBEAT"             		            		
+                ref="AQCommander" method="handleHeartBeat"/>
+    </jms:listener-container>
+
+
+    
     
     <orcl:aq-jms-connection-factory id="connectionFactory"
             use-local-data-source-transaction="true"

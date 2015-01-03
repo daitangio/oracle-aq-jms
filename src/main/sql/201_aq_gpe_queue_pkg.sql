@@ -1,4 +1,84 @@
-create or replace package body aq_jms_pkg
+CREATE OR REPLACE package aq_jms_pkg
+is
+
+  TYPE t_rowid_array IS TABLE OF ROWID   INDEX BY BINARY_INTEGER;
+  AQUEUE_ENQUEUE_ARRAY_LIMIT CONSTANT NUMBER DEFAULT 1000;
+  INSERT_PARALLEL_LEVEL   CONSTANT NUMBER DEFAULT 2; -- Try 4 on Exadata
+
+-- -   TYPE mypayment IS REF CURSOR RETURN vt_bulk_payments%ROWTYPE;
+
+  procedure create_vt_queue (
+    p_queue_name      varchar2, -- case-insensitive
+    p_retry_delay_min number   default 5, -- minutes of invisibility after rollback 
+    p_max_retries     int      default 2000000000, -- max number of retries 
+    p_force_recreate  varchar2 default 'N'
+  );
+
+
+  -- se non ci sono messaggi in coda:
+  --   p_timeout_secs = 0 => ritorna immediatamente 
+  --   p_timeout_secs > 0 => ritorna al primo messaggio con timeout
+  -- p_message_present = 'Y' => un messaggio e' stato ritornato
+  -- p_message => il messaggio (valido solo se p_message_present = 'Y')
+  --
+  -- commit => il messaggio viene eliminato dalla coda
+  -- rollback => il messaggio rimane in coda
+  procedure dequeue (
+    p_queue_name      varchar2,
+    p_timeout_secs    int default 600,
+    p_message_present out varchar2, -- Y/N
+    p_message         out varchar2
+  );
+
+  
+
+  -- accoda un messaggio jms
+  function jms_enqueue (
+    p_queue_name      varchar2,
+    p_message varchar2, 
+    p_priority number default 100
+  )
+  return raw;
+  
+  function jms_topic_enqueue (
+    p_queue_name      varchar2,
+    p_message varchar2, 
+    p_priority number default 100
+  ) return raw;
+  
+  
+  -- accoda p_n messaggi col prefisso dato
+  procedure enqueue_test (
+    p_queue_name varchar2,
+    p_prefix varchar2, 
+    p_n number
+  );
+  
+  -- svuota la coda
+  procedure empty_queue(p_queue_name      varchar2);
+
+
+
+   --GG Crea una coda testuale se non esiste già
+   --
+   procedure ensure_jmstext_queue_exists(p_qname varchar2, p_force boolean default false);
+
+   procedure ensure_jmsobject_queue_exists(p_qname varchar2, p_force boolean default false);
+
+  procedure drop_single_queue (p_single_queue_name varchar2) ; 
+  procedure drop_single_queue_table (p_single_queue_table_name varchar2) ;
+  procedure stop_single_queue (p_single_queue_name varchar2) ;
+
+
+  procedure testmessage ;
+  
+  procedure send_heartbeat(p_msg varchar2);
+
+end aq_jms_pkg;
+/
+
+
+CREATE OR REPLACE package body aq_jms_pkg
 is
 
 timeout_exception exception;
@@ -312,9 +392,10 @@ is
   l_options        dbms_aq.enqueue_options_t;
   l_msg_props      dbms_aq.message_properties_t;
   l_msgid          raw(32);
-  l_msg            sys.aq$_jms_text_message := sys.aq$_jms_text_message.construct();
+  --l_msg            sys.aq$_jms_text_message := sys.aq$_jms_text_message.construct();
 
 begin
+/*
   l_queue_name      := sys_context ('userenv', 'current_user')||'.'|| p_queue_name;
   l_queue_name_exc  := l_queue_name || '_EX';
   
@@ -333,7 +414,7 @@ begin
     payload            => l_msg,
     msgid              => l_msgid 
   );
-  
+*/  
   return l_msgid;
 end jms_enqueue;
 
@@ -351,9 +432,10 @@ is
   l_options        dbms_aq.enqueue_options_t;
   l_msg_props      dbms_aq.message_properties_t;
   l_msgid          raw(32);
-  l_msg            sys.aq$_jms_text_message := sys.aq$_jms_text_message.construct();
+  --l_msg            sys.aq$_jms_text_message := sys.aq$_jms_text_message.construct();
 
 begin
+/*
   l_queue_name      := sys_context ('userenv', 'current_user')||'.'|| p_queue_name;
   l_queue_name_exc  := l_queue_name || '_EX';
   
@@ -372,7 +454,7 @@ begin
     payload            => l_msg,
     msgid              => l_msgid 
   );
-  
+  */
   return l_msgid;
 end jms_topic_enqueue;
 
@@ -831,10 +913,11 @@ begin
 
   msg_hdr := SYS.AQ$_JMS_HEADER(msg_agent,null,'<USERNAME>',null,null,null,msg_proparray);
   msg := SYS.AQ$_JMS_TEXT_MESSAGE(msg_hdr,null,null,null);
-  msg.text_vc := 'Aqueue Poc Heartbeat';
+  --msg.text_vc := 'Aqueue Poc Heartbeat';
+  msg.text_vc := 'EXIT';
   msg.text_len := length(msg.text_vc);
   
-  l_queue_name      := sys_context ('userenv', 'current_user')||'.'||'GPE_HEARTBEAT_QUEUE';
+  l_queue_name      := sys_context ('userenv', 'current_user')||'.'||'GPE_HEARTBEAT';
   DBMS_AQ.ENQUEUE( queue_name => l_queue_name
                  , enqueue_options => queue_options
                  , message_properties => msg_props
@@ -843,10 +926,37 @@ begin
 end testmessage;
 
 
+procedure send_heartbeat(p_msg varchar2)
+IS
+  msg SYS.AQ$_JMS_TEXT_MESSAGE;
+  msg_hdr SYS.AQ$_JMS_HEADER;
+  msg_agent SYS.AQ$_AGENT;
+  msg_proparray SYS.AQ$_JMS_USERPROPARRAY;
+  msg_property SYS.AQ$_JMS_USERPROPERTY;
+  queue_options DBMS_AQ.ENQUEUE_OPTIONS_T;
+  msg_props DBMS_AQ.MESSAGE_PROPERTIES_T;
+  msg_id RAW(16);
+  dummy VARCHAR2(4000);
+  l_queue_name     varchar2(30);
+begin
+  msg_agent := SYS.AQ$_AGENT(' ', null, 0);
+  msg_proparray := SYS.AQ$_JMS_USERPROPARRAY();
+  msg_proparray.EXTEND(1);
+  msg_property := SYS.AQ$_JMS_USERPROPERTY('JMS_OracleDeliveryMode', 100, '2', NULL, 27);
+  msg_proparray(1) := msg_property;
+
+  msg_hdr := SYS.AQ$_JMS_HEADER(msg_agent,null,'<USERNAME>',null,null,null,msg_proparray);
+  msg := SYS.AQ$_JMS_TEXT_MESSAGE(msg_hdr,null,null,null);
+  msg.text_vc :=  p_msg;
+  msg.text_len := length(msg.text_vc);
+  
+  l_queue_name      := sys_context ('userenv', 'current_user')||'.'||'GPE_HEARTBEAT';
+  DBMS_AQ.ENQUEUE( queue_name => l_queue_name
+                 , enqueue_options => queue_options
+                 , message_properties => msg_props
+                 , payload => msg
+                 , msgid => msg_id);
+end send_heartbeat;
+
 end aq_jms_pkg;
-
 /
-show errors
-
-
-

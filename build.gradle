@@ -21,8 +21,6 @@ buildscript {
 		// see https://github.com/berlin-ab/springbootblog/tree/blog/hot-reload
 		classpath("org.springframework.boot:spring-boot-gradle-plugin:1+")
 		//classpath("org.springframework:springloaded:1+")
-		
-
         
     }
 }
@@ -75,6 +73,14 @@ dependencies {
 }
 
 
+sourceSets {
+  test {
+    resources {
+      srcDir "src/main/resources"
+    }
+  }
+}
+
 repositories {
     mavenCentral()
     maven { url 'http://repo.spring.io/milestone' }
@@ -96,6 +102,6 @@ task wrapper(type: Wrapper) {
 
 allprojects {
 	task hello << { task -> println "Project: $task.project.name" }
-	sourceCompatibility = 1.8
-	targetCompatibility = 1.8
+	sourceCompatibility = 1.7
+	targetCompatibility = 1.7
 }

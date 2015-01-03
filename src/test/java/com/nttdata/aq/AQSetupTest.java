@@ -67,9 +67,10 @@ public class AQSetupTest extends AbstractTransactionalJUnit4SpringContextTests  
 	public void testSimpleWiring(){
 		assertNotNull(aqCommander);
 		try {
-			Thread.sleep(2000);
-		} catch (InterruptedException e) {
-			// TODO Auto-generated catch block
+                        System.err.println("Ready to wait 10 minutes for heartbeats...");
+                        System.err.println("Feel free to push some data to DATA_DRIVEN_TEST table to see the heartbeat test messages");
+			Thread.sleep(10*60*1000);
+		} catch (InterruptedException e) {		     
 			e.printStackTrace();
 		}
 

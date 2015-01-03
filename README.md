@@ -1,5 +1,5 @@
-oracle-aq-jms
-=============
+oracle-aq-jms / Oracle Express XE Extension
+============================================
 
 Oracle Advanced Queuing as JMS replacement using spring and gradle
 
@@ -16,7 +16,15 @@ Speed Start
 
 1. Create an oracle  user called "gundam" like the scott/tiger user (or hr user on Oracle XE)
 2. Run in the lexicografical order the script under src/main/sql
-3. Compile with gradle and run the unit tests
+3. Create a src//main/resources/spring/data-access.properties file,
+configured with your Oracle jdbc connection, username and password
+4. Compile with gradle and run the unit tests in "info" mode:
+`./gradlew -i test`
+
+5. Push some messages on the heartbeat queue, the system will exit at
+the "EXIT" message (see the src/main/sql/700_unit_test_queues.sql file
+for an example).
+
 
 ## Core Team Members
 
@@ -50,7 +58,6 @@ AQ support under OracleExpress is a bumpy way so plese test every single piece o
 References
 ==============
 http://gbowyer.freeshell.org/oracle-aq.html
-http://technology.amis.nl/GPE_HEARTBEAT7/08/30/enqueuing-aq-jms-text-message-from-plsql-on-oracle-xe/
 
 
 [oracle-xe-fix] http://technology.amis.nl/2007/08/30/enqueuing-aq-jms-text-message-from-plsql-on-oracle-xe/
